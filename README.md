@@ -176,6 +176,7 @@ For integrating additional legacy hardware (Antminer S9, GekkoScience, Bitaxe, e
 | [docs/winning.md](docs/winning.md) | **What to do if a block is found** |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Common failures and fixes |
 | [LEGACY.md](LEGACY.md) | Legacy hardware integration (Proxmox/LXC) |
+| [THIRD_PARTY.md](THIRD_PARTY.md) | Third-party software notices and licenses |
 
 ---
 
