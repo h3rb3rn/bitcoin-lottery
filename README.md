@@ -1,7 +1,7 @@
 # bitcoin-lottery
 
 [![Python](https://img.shields.io/badge/python-3.11-blue?logo=python&logoColor=white)](https://www.python.org/)
-[![Docker Build](https://img.shields.io/badge/docker-build-passing-brightgreen?logo=docker&logoColor=white)](./Dockerfile)
+[![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](./docker-compose.yml)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](./LICENSE)
 [![Status](https://img.shields.io/badge/status-active-success)](https://github.com/h3rb3rn/bitcoin-lottery)
 
@@ -56,29 +56,49 @@ open http://<server-ip>:8080
 
 ## Architecture
 
-```
-.env                       → Pool credentials, wallet, SMTP config (gitignored)
-.env.example               → Config template — no secrets
-docker-compose.yml         → Two services: bfgminer (miner) + python (monitor)
-Dockerfile                 → debian:bookworm-slim + BFGMiner from source
-monitor/app.py             → HTTP server, SQLite collector, SMTP alerts
-monitor/adapters.py        → Normalized adapter layer for heterogeneous miner APIs
-monitor/index.html         → Single-page dashboard (Chart.js, no build step)
-udev/50-nanofury.rules     → Unbinds usbhid, sets USB permissions on plug
-scripts/status.sh          → Terminal status summary (for watch/cron)
-docs/                      → Hardware, mining, dashboard, troubleshooting, winning
-data/monitor.db            → SQLite database (auto-created, gitignored)
+```mermaid
+graph LR
+    subgraph config["Configuration"]
+        env[".env"]
+        example[".env.example"]
+    end
+
+    subgraph containers["Docker Compose"]
+        direction TB
+        bfg["nanofury_lottery\nBFGMiner :4028"]
+        mon["bitcoin_monitor\nPython :8080"]
+    end
+
+    subgraph storage["Persistence"]
+        db["data/monitor.db\nSQLite"]
+    end
+
+    subgraph host["Host"]
+        udev["udev/50-nanofury.rules"]
+        hw["NanoFury NF2\nUSB ASIC"]
+    end
+
+    env --> bfg
+    env --> mon
+    udev --> hw
+    hw --> bfg
+    bfg -- "TCP API" --> mon
+    mon --> db
 ```
 
 **Data flow:**
-```
-.env
- └─► docker-compose.yml env vars
-      └─► BFGMiner CLI args ──► Stratum TCP ──► solo.ckpool.org ──► Bitcoin network
-           └─► TCP API :4028
-                └─► monitor/adapters.py (poll every 60 s)
-                     └─► SQLite ──► HTTP :8080 ──► dashboard
-                          └─► SMTP alerts
+
+```mermaid
+flowchart LR
+    env[".env"] --> dc["docker-compose.yml"]
+    dc --> bfg["BFGMiner"]
+    bfg -- "Stratum TCP" --> pool["solo.ckpool.org"]
+    pool --> btc["Bitcoin network"]
+    bfg -- "TCP :4028" --> adapters["adapters.py\npoll 60 s"]
+    adapters --> sqlite["SQLite"]
+    sqlite --> http["HTTP :8080"]
+    http --> dash["Dashboard"]
+    sqlite --> smtp["SMTP alerts"]
 ```
 
 ---
