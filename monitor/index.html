@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bitcoin Lottery — NanoFury NF2</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0f0f0f;
+    --surface: #1a1a1a;
+    --border:  #2a2a2a;
+    --text:    #e0e0e0;
+    --muted:   #888;
+    --green:   #22c55e;
+    --red:     #ef4444;
+    --orange:  #f59e0b;
+    --blue:    #3b82f6;
+    --purple:  #a855f7;
+    --gold:    #fbbf24;
+  }
+
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px; line-height: 1.5; min-height: 100vh;
+  }
+
+  /* ---- Header ---- */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 20px; border-bottom: 1px solid var(--border);
+    background: var(--surface); flex-wrap: wrap; gap: 8px;
+  }
+  header h1 { font-size: 15px; font-weight: 600; letter-spacing: .4px; }
+  header h1 span { color: var(--orange); }
+  #pool-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  #pool-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); transition: background .3s; }
+  #pool-dot.alive { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  #pool-dot.dead  { background: var(--red); }
+  #last-update { font-size: 11px; color: var(--muted); }
+
+  /* ---- Time window toolbar ---- */
+  #toolbar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 10px 20px; border-bottom: 1px solid var(--border);
+    background: #111;
+  }
+  .quick-btn {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 4px; padding: 4px 12px; font-size: 12px; cursor: pointer;
+    transition: all .15s;
+  }
+  .quick-btn.active, .quick-btn:hover { border-color: var(--orange); color: var(--orange); }
+  .divider { width: 1px; height: 20px; background: var(--border); }
+  #custom-range { display: flex; align-items: center; gap: 6px; }
+  #custom-range input[type="date"] {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    border-radius: 4px; padding: 4px 8px; font-size: 12px;
+  }
+  #custom-range input[type="date"]:focus { outline: none; border-color: var(--orange); }
+  #apply-range {
+    background: var(--orange); border: none; color: #000;
+    border-radius: 4px; padding: 4px 12px; font-size: 12px;
+    font-weight: 600; cursor: pointer;
+  }
+  #range-label { font-size: 11px; color: var(--muted); margin-left: auto; }
+  #miner-select:focus { outline: none; border-color: var(--orange); }
+
+  /* ---- Layout ---- */
+  main { padding: 16px 20px; display: grid; gap: 14px; }
+
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .card-label { font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 6px; }
+  .card-value { font-size: 26px; font-weight: 700; line-height: 1; }
+  .card-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .card-value.green  { color: var(--green); }
+  .card-value.orange { color: var(--orange); }
+  .card-value.gold   { color: var(--gold); font-size: 40px; }
+  .card-value.red    { color: var(--red); }
+  .card-value.blue   { color: var(--blue); }
+  .card-value.purple { color: var(--purple); }
+
+  /* ---- Charts ---- */
+  .chart-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .chart-title { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin-bottom: 12px; }
+  canvas { max-height: 180px; }
+
+  /* ---- Block events table ---- */
+  #block-section { display: none; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 12px; font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); border-bottom: 1px solid var(--border); }
+  td { padding: 10px 12px; border-bottom: 1px solid #1e1e1e; }
+  tr:last-child td { border-bottom: none; }
+  .win { color: var(--gold); font-weight: 700; }
+
+  /* ---- All-time stats ---- */
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-bottom: 4px; }
+  .stat-value { font-size: 16px; font-weight: 600; }
+
+  footer { text-align: center; padding: 14px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); }
+
+  @media (max-width: 600px) {
+    main, #toolbar { padding: 10px; }
+    .card-value { font-size: 20px; }
+    .card-value.gold { font-size: 30px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>NanoFury NF2 &mdash; <span>Bitcoin Lottery</span></h1>
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div id="pool-badge">
+      <div id="pool-dot"></div>
+      <span id="pool-label">Pool: –</span>
+    </div>
+    <span id="last-update"></span>
+  </div>
+</header>
+
+<!-- Time window toolbar -->
+<div id="toolbar">
+  <button class="quick-btn" data-range="1h">1h</button>
+  <button class="quick-btn" data-range="6h">6h</button>
+  <button class="quick-btn active" data-range="24h">24h</button>
+  <button class="quick-btn" data-range="7d">7 days</button>
+  <button class="quick-btn" data-range="30d">30 days</button>
+  <button class="quick-btn" data-range="90d">90 days</button>
+  <button class="quick-btn" data-range="365d">1 year</button>
+  <div class="divider"></div>
+  <div id="custom-range">
+    <span style="font-size:12px;color:var(--muted)">From</span>
+    <input type="date" id="date-start">
+    <span style="font-size:12px;color:var(--muted)">To</span>
+    <input type="date" id="date-end">
+    <button id="apply-range">Apply</button>
+  </div>
+  <span id="range-label"></span>
+  <div class="divider" id="miner-divider" style="display:none"></div>
+  <select id="miner-select" style="display:none;background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px 8px;font-size:12px;">
+    <option value="all">All Miners</option>
+  </select>
+</div>
+
+<main>
+
+  <!-- Current metrics -->
+  <div class="metrics-row">
+    <div class="card">
+      <div class="card-label">Hashrate</div>
+      <div class="card-value orange" id="hashrate">–</div>
+      <div class="card-sub" id="hashrate-20s">20s: –</div>
+    </div>
+    <div class="card">
+      <div class="card-label">BTC Price</div>
+      <div class="card-value blue" id="btc-price">–</div>
+      <div class="card-sub" id="btc-price-usd">– USD</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Block Reward Value</div>
+      <div class="card-value purple" id="block-value">–</div>
+      <div class="card-sub" id="block-value-usd">– USD</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Blocks Found</div>
+      <div class="card-value gold" id="found-blocks">–</div>
+      <div class="card-sub" id="found-blocks-sub">= jackpot</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Best Share</div>
+      <div class="card-value" id="best-share">–</div>
+      <div class="card-sub">Target: ~86 billion</div>
+    </div>
+    <div class="card">
+      <div class="card-label">HW Error Rate</div>
+      <div class="card-value" id="hw-pct">–</div>
+      <div class="card-sub" id="hw-errors">– total errors</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Uptime</div>
+      <div class="card-value green" id="uptime">–</div>
+      <div class="card-sub" id="diff1">Diff1-Work: –</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Cumulative Hashwork</div>
+      <div class="card-value" id="cumulative-hash" style="color:var(--green);font-size:22px">–</div>
+      <div class="card-sub">since monitoring start</div>
+    </div>
+    <div class="card" id="temp-card" style="display:none">
+      <div class="card-label">Temperature</div>
+      <div class="card-value" id="temp-c">–</div>
+      <div class="card-sub">chip °C</div>
+    </div>
+  </div>
+
+  <!-- Hashrate chart -->
+  <div class="chart-card">
+    <div class="chart-title">Hashrate (MH/s)</div>
+    <canvas id="hashrate-chart"></canvas>
+  </div>
+
+  <!-- BTC price chart -->
+  <div class="chart-card">
+    <div class="chart-title">BTC Price (EUR)</div>
+    <canvas id="price-chart"></canvas>
+  </div>
+
+  <!-- HW error rate chart -->
+  <div class="chart-card">
+    <div class="chart-title">HW Error Rate (%)</div>
+    <canvas id="hw-chart"></canvas>
+  </div>
+
+  <!-- Block events (hidden until there are wins) -->
+  <div id="block-section" class="chart-card">
+    <div class="chart-title">Blocks Found 🏆</div>
+    <table id="block-table">
+      <thead><tr>
+        <th>Timestamp</th>
+        <th>Block #</th>
+        <th>Miner</th>
+        <th>BTC Price (EUR)</th>
+        <th>Value (EUR)</th>
+        <th>Value (USD)</th>
+      </tr></thead>
+      <tbody id="block-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- All-time stats -->
+  <div class="stats-row" id="stats-row" style="display:none">
+    <div class="stat"><div class="stat-label">Ø Hashrate</div><div class="stat-value" id="stat-avg-hash">–</div></div>
+    <div class="stat"><div class="stat-label">Pool Uptime</div><div class="stat-value" id="stat-uptime-pct">–</div></div>
+    <div class="stat"><div class="stat-label">Best Share</div><div class="stat-value" id="stat-best-share">–</div></div>
+    <div class="stat"><div class="stat-label">Blocks Found</div><div class="stat-value" id="stat-found">–</div></div>
+    <div class="stat"><div class="stat-label">Cumulative Hashwork</div><div class="stat-value" id="stat-cumulative">–</div></div>
+    <div class="stat"><div class="stat-label">Monitoring Since</div><div class="stat-value" id="stat-since">–</div></div>
+  </div>
+
+</main>
+
+<footer>Updated every 60s · Price daily via CoinGecko · BFGMiner 5.5.0 · solo.ckpool.org</footer>
+
+<script>
+// ---- Helpers ----
+const $ = id => document.getElementById(id);
+
+function fmtTime(ts, rangeSeconds) {
+  const d = new Date(ts * 1000);
+  if (rangeSeconds > 86400)
+    return d.toLocaleDateString('en-US', { day: '2-digit', month: '2-digit' });
+  return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDateTime(ts) {
+  return new Date(ts * 1000).toLocaleString('en-US', {
+    day:'2-digit', month:'2-digit', year:'numeric',
+    hour:'2-digit', minute:'2-digit'
+  });
+}
+function fmtUptime(sec) {
+  const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+function fmtHash(mhs) {
+  if (!mhs) return '–';
+  return mhs >= 1000 ? (mhs / 1000).toFixed(2) + ' GH/s' : Math.round(mhs) + ' MH/s';
+}
+function fmtShare(v) {
+  if (!v) return '–';
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + ' G';
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + ' M';
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + ' K';
+  return v.toFixed(2);
+}
+function fmtTotalHash(mh) {
+  if (!mh) return '–';
+  if (mh >= 1e9) return (mh / 1e9).toFixed(3) + ' PH';
+  if (mh >= 1e6) return (mh / 1e6).toFixed(3) + ' TH';
+  if (mh >= 1e3) return (mh / 1e3).toFixed(2) + ' GH';
+  return mh.toFixed(0) + ' MH';
+}
+function fmtEur(v) {
+  if (!v) return '–';
+  return new Intl.NumberFormat('en-US', { style:'currency', currency:'EUR', maximumFractionDigits: 0 }).format(v);
+}
+function fmtUsd(v) {
+  if (!v) return '–';
+  return new Intl.NumberFormat('en-US', { style:'currency', currency:'USD', maximumFractionDigits: 0 }).format(v);
+}
+
+// ---- Chart defaults ----
+const CHART_OPTS = {
+  responsive: true, maintainAspectRatio: true, animation: false,
+  plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+  scales: {
+    x: { ticks: { color: '#666', maxTicksLimit: 8, maxRotation: 0 }, grid: { color: '#222' } },
+    y: { ticks: { color: '#666' }, grid: { color: '#222' }, beginAtZero: false }
+  }
+};
+
+const hrChart = new Chart($('hashrate-chart'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'Ø MH/s', data: [], borderColor: '#f59e0b', borderWidth: 2,
+      pointRadius: 0, fill: true, backgroundColor: 'rgba(245,158,11,0.08)', tension: 0.3 },
+    { label: '20s MH/s', data: [], borderColor: '#3b82f6', borderWidth: 1,
+      pointRadius: 0, fill: false, tension: 0.3, borderDash: [4,4] }
+  ]},
+  options: { ...CHART_OPTS, scales: { ...CHART_OPTS.scales,
+    y: { ...CHART_OPTS.scales.y, ticks: { ...CHART_OPTS.scales.y.ticks,
+      callback: v => Math.round(v) + ' MH/s' }}}}
+});
+
+const priceChart = new Chart($('price-chart'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'EUR', data: [], borderColor: '#a855f7', borderWidth: 2,
+      pointRadius: 2, fill: true, backgroundColor: 'rgba(168,85,247,0.08)', tension: 0.3 }
+  ]},
+  options: { ...CHART_OPTS, scales: { ...CHART_OPTS.scales,
+    y: { ...CHART_OPTS.scales.y, ticks: { ...CHART_OPTS.scales.y.ticks,
+      callback: v => v.toLocaleString('en-US') + ' EUR' }}}}
+});
+
+const hwChart = new Chart($('hw-chart'), {
+  type: 'line',
+  data: { labels: [], datasets: [
+    { label: 'HW Error %', data: [], borderColor: '#ef4444', borderWidth: 2,
+      pointRadius: 0, fill: true, backgroundColor: 'rgba(239,68,68,0.08)', tension: 0.3 }
+  ]},
+  options: { ...CHART_OPTS, scales: { ...CHART_OPTS.scales,
+    y: { ...CHART_OPTS.scales.y, beginAtZero: true, ticks: { ...CHART_OPTS.scales.y.ticks,
+      callback: v => v.toFixed(2) + '%' }}}}
+});
+
+// ---- Time window + miner state ----
+let windowStart  = null;
+let windowEnd    = null;
+let windowRange  = '24h';
+let currentMiner = 'all';   // 'all' or a miner_id string
+
+const CHART_COLORS = [
+  { line: '#f59e0b', fill: 'rgba(245,158,11,0.08)' },   // orange
+  { line: '#3b82f6', fill: 'rgba(59,130,246,0.08)' },   // blue
+  { line: '#22c55e', fill: 'rgba(34,197,94,0.08)' },    // green
+  { line: '#a855f7', fill: 'rgba(168,85,247,0.08)' },   // purple
+  { line: '#f43f5e', fill: 'rgba(244,63,94,0.08)' },    // rose
+];
+
+function windowSeconds() {
+  if (windowStart && windowEnd) return windowEnd - windowStart;
+  const map = { '1h':3600,'6h':21600,'24h':86400,'7d':604800,'30d':2592000,'90d':7776000,'365d':31536000 };
+  return map[windowRange] || 86400;
+}
+
+function buildHistoryUrl(endpoint) {
+  const mq = currentMiner !== 'all' ? `&miner=${currentMiner}` : '';
+  if (windowStart && windowEnd)
+    return `${endpoint}?start=${windowStart}&end=${windowEnd}${mq}`;
+  return `${endpoint}?range=${windowRange}${mq}`;
+}
+
+function setRangeLabel() {
+  const el = $('range-label');
+  el.textContent = (windowStart && windowEnd)
+    ? `${fmtDateTime(windowStart)} → ${fmtDateTime(windowEnd)}` : '';
+}
+
+// Quick buttons
+document.querySelectorAll('.quick-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    windowRange = btn.dataset.range;
+    windowStart = null; windowEnd = null;
+    setRangeLabel();
+    loadCharts();
+  });
+});
+
+// Custom range
+$('apply-range').addEventListener('click', () => {
+  const s = $('date-start').value, e = $('date-end').value;
+  if (!s || !e) return;
+  windowStart = Math.floor(new Date(s).getTime() / 1000);
+  windowEnd   = Math.floor(new Date(e + 'T23:59:59').getTime() / 1000);
+  document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
+  setRangeLabel();
+  loadCharts();
+});
+
+// Pre-fill date inputs
+(function () {
+  $('date-end').value   = new Date().toISOString().slice(0, 10);
+  $('date-start').value = new Date(Date.now() - 7 * 86400e3).toISOString().slice(0, 10);
+})();
+
+// Miner selector
+$('miner-select').addEventListener('change', e => {
+  currentMiner = e.target.value;
+  refresh();
+  loadCharts();
+});
+
+// ---- Multi-miner chart rendering ----
+function renderCharts(history, prices) {
+  const secs = windowSeconds();
+
+  if (currentMiner !== 'all') {
+    // Single miner — existing two-line behavior
+    const labels = history.map(r => fmtTime(r.ts, secs));
+    hrChart.data.labels = labels;
+    hrChart.data.datasets = [
+      { label: 'Avg MH/s', data: history.map(r => r.mhs_avg),
+        borderColor: '#f59e0b', borderWidth: 2, pointRadius: 0,
+        fill: true, backgroundColor: 'rgba(245,158,11,0.08)', tension: 0.3 },
+      { label: '20s MH/s', data: history.map(r => r.mhs_20s),
+        borderColor: '#3b82f6', borderWidth: 1, pointRadius: 0,
+        fill: false, tension: 0.3, borderDash: [4,4] },
+    ];
+    hrChart.update();
+
+    hwChart.data.labels = labels;
+    hwChart.data.datasets = [{
+      label: 'HW Error %', data: history.map(r => r.hw_pct),
+      borderColor: '#ef4444', borderWidth: 2, pointRadius: 0,
+      fill: true, backgroundColor: 'rgba(239,68,68,0.08)', tension: 0.3,
+    }];
+    hwChart.update();
+  } else {
+    // All miners — one dataset per miner_id
+    const minerIds = [...new Set(history.map(r => r.miner_id))];
+    const allTs    = [...new Set(history.map(r => r.ts))].sort((a,b)=>a-b);
+    const labels   = allTs.map(ts => fmtTime(ts, secs));
+
+    hrChart.data.labels = labels;
+    hrChart.data.datasets = minerIds.map((mid, i) => {
+      const rows = history.filter(r => r.miner_id === mid);
+      const byTs = Object.fromEntries(rows.map(r => [r.ts, r.mhs_avg]));
+      const col  = CHART_COLORS[i % CHART_COLORS.length];
+      const name = $('miner-select').querySelector(`[value="${mid}"]`)?.textContent || mid;
+      return {
+        label: name, data: allTs.map(ts => byTs[ts] ?? null),
+        borderColor: col.line, borderWidth: 2, pointRadius: 0,
+        fill: i === 0, backgroundColor: col.fill, tension: 0.3, spanGaps: true,
+      };
+    });
+    hrChart.update();
+
+    hwChart.data.labels = labels;
+    hwChart.data.datasets = minerIds.map((mid, i) => {
+      const rows = history.filter(r => r.miner_id === mid);
+      const byTs = Object.fromEntries(rows.map(r => [r.ts, r.hw_pct]));
+      const col  = CHART_COLORS[i % CHART_COLORS.length];
+      const name = $('miner-select').querySelector(`[value="${mid}"]`)?.textContent || mid;
+      return {
+        label: name, data: allTs.map(ts => byTs[ts] ?? null),
+        borderColor: col.line, borderWidth: 1.5, pointRadius: 0,
+        fill: false, tension: 0.3, spanGaps: true,
+      };
+    });
+    hwChart.update();
+  }
+
+  // Price chart (always single line)
+  const pLabels = prices.map(r => fmtTime(r.ts, secs));
+  priceChart.data.labels = pLabels;
+  priceChart.data.datasets[0].data = prices.map(r => r.price_eur);
+  priceChart.update();
+}
+
+// ---- Current metrics rendering ----
+function renderNow(data) {
+  if (!data) return;
+
+  // Pick the right data source: specific miner or aggregate
+  const d = (currentMiner !== 'all' && data.miners?.[currentMiner])
+    ? data.miners[currentMiner]
+    : data.aggregate;
+
+  if (!d) return;
+
+  $('hashrate').textContent    = fmtHash(d.mhs_avg);
+  $('hashrate-20s').textContent = '20s: ' + fmtHash(d.mhs_20s);
+
+  if (data.price_eur) {
+    $('btc-price').textContent    = fmtEur(data.price_eur);
+    $('btc-price-usd').textContent = fmtUsd(data.price_usd);
+    $('block-value').textContent   = fmtEur(data.block_value_eur);
+    $('block-value-usd').textContent = fmtUsd(data.block_value_usd);
+  }
+
+  const fb = d.found_blocks ?? 0;
+  $('found-blocks').textContent = fb;
+  $('found-blocks').className   = 'card-value ' + (fb > 0 ? 'green' : 'gold');
+  $('found-blocks-sub').textContent = fb > 0 ? `${fb} × ${BLOCK_REWARD_BTC} BTC` : '= jackpot';
+
+  $('best-share').textContent = fmtShare(d.best_share);
+
+  const hwPct = d.hw_pct ?? 0;
+  $('hw-pct').textContent   = hwPct.toFixed(4) + '%';
+  $('hw-pct').className     = 'card-value ' + (hwPct > 2 ? 'red' : hwPct > 1 ? 'orange' : 'green');
+  $('hw-errors').textContent = (d.hw_errors ?? 0) + ' total errors';
+
+  $('uptime').textContent = fmtUptime(d.elapsed ?? 0);
+  $('diff1').textContent  = 'Diff1-Work: ' + (d.diff1_work ?? 0).toLocaleString('en-US');
+
+  // Temperature card
+  const allTemps = Object.values(data.miners || {}).map(m => m.temp_c).filter(t => t != null);
+  if (allTemps.length) {
+    $('temp-card').style.display = '';
+    const showTemp = (currentMiner !== 'all' && d.temp_c != null) ? d.temp_c : Math.max(...allTemps);
+    $('temp-c').textContent  = showTemp.toFixed(1) + ' °C';
+    $('temp-c').className    = 'card-value ' + (showTemp > 80 ? 'red' : showTemp > 65 ? 'orange' : 'green');
+  }
+
+  const dot = $('pool-dot'), lbl = $('pool-label');
+  dot.className  = d.pool_alive ? 'alive' : 'dead';
+  lbl.textContent = d.pool_alive ? 'Pool: Live' : 'Pool: OFFLINE';
+
+  $('last-update').textContent = 'Updated: ' + new Date().toLocaleTimeString('en-US');
+}
+
+function renderStats(s) {
+  if (!s || !s.total_samples) return;
+  $('stats-row').style.display = '';
+  $('stat-avg-hash').textContent  = fmtHash(s.avg_hashrate);
+  $('stat-uptime-pct').textContent = (s.uptime_pct ?? 0) + '%';
+  $('stat-best-share').textContent = fmtShare(s.peak_best_share);
+  $('stat-found').textContent      = s.total_found ?? 0;
+  const cumHash = fmtTotalHash(s.cumulative_mh);
+  $('stat-cumulative').textContent = cumHash;
+  $('cumulative-hash').textContent = cumHash;
+  $('stat-since').textContent = s.first_seen
+    ? new Date(s.first_seen * 1000).toLocaleDateString('en-US') : '–';
+}
+
+function renderBlocks(events) {
+  if (!events || events.length === 0) return;
+  $('block-section').style.display = '';
+  const tbody = $('block-tbody');
+  tbody.innerHTML = '';
+  events.forEach(e => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtDateTime(e.ts)}</td>
+      <td class="win">#${e.block_num}</td>
+      <td>${e.miner_id || '–'}</td>
+      <td>${e.price_eur ? fmtEur(e.price_eur) : '–'}</td>
+      <td class="win">${e.value_eur ? fmtEur(e.value_eur) : '–'}</td>
+      <td>${e.value_usd ? fmtUsd(e.value_usd) : '–'}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// ---- Miner list (populate selector) ----
+const BLOCK_REWARD_BTC = 3.125;  // updated from /api/now if needed
+async function loadMiners() {
+  try {
+    const miners = await fetch('/api/miners').then(r => r.json());
+    const sel = $('miner-select');
+    sel.innerHTML = '<option value="all">All Miners</option>';
+    miners.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.miner_id;
+      opt.textContent = m.name;
+      sel.appendChild(opt);
+    });
+    if (miners.length > 1) {
+      $('miner-divider').style.display = '';
+      sel.style.display = '';
+    }
+  } catch {}
+}
+
+// ---- Fetch + refresh ----
+async function loadNow() {
+  try {
+    const data = await fetch('/api/now').then(r => r.json());
+    renderNow(data);
+  } catch {}
+}
+async function loadCharts() {
+  try {
+    const mq = currentMiner !== 'all' ? `&miner=${currentMiner}` : '';
+    const statsQ = currentMiner !== 'all' ? `?miner=${currentMiner}` : '';
+    const [history, prices] = await Promise.all([
+      fetch(buildHistoryUrl('/api/history')).then(r => r.json()),
+      fetch(buildHistoryUrl('/api/prices')).then(r => r.json()),
+    ]);
+    renderCharts(history, prices);
+  } catch {}
+}
+async function loadStats() {
+  try {
+    const q = currentMiner !== 'all' ? `?miner=${currentMiner}` : '';
+    renderStats(await fetch(`/api/stats${q}`).then(r => r.json()));
+  } catch {}
+}
+async function loadBlocks() {
+  try { renderBlocks(await fetch('/api/blocks').then(r => r.json())); } catch {}
+}
+
+async function refresh() {
+  await loadNow();
+  await loadBlocks();
+  await loadStats();
+}
+async function refreshCharts() { await loadCharts(); }
+
+// Init
+loadMiners();
+refresh();
+refreshCharts();
+setInterval(refresh, 60000);
+setInterval(refreshCharts, 300000);
+</script>
+</body>
+</html>

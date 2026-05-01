@@ -1,0 +1,64 @@
+services:
+  nanofury_lottery:
+    container_name: nanofury_lottery
+    build: .
+    image: bitcoin-lottery-nanofury-miner
+    restart: unless-stopped
+    privileged: true
+    tty: true
+    stdin_open: true
+    volumes:
+      - /dev:/dev
+      - /dev/bus/usb:/dev/bus/usb
+    environment:
+      - MINER_POOL_URL=${MINER_POOL_URL}
+      - MINER_WALLET=${MINER_WALLET}
+      - MINER_PASSWORD=${MINER_PASSWORD}
+    ports:
+      - "127.0.0.1:4028:4028"
+    command:
+      - "-S"
+      - "nanofury:all"
+      - "-o"
+      - "${MINER_POOL_URL}"
+      - "-u"
+      - "${MINER_WALLET}"
+      - "-p"
+      - "${MINER_PASSWORD}"
+      - "--set"
+      - "NFY:osc6_bits=${OSC6_BITS:-54}"
+      - "--api-listen"
+      - "--api-allow"
+      - "W:0/0"
+
+  monitor:
+    container_name: bitcoin_monitor
+    image: python:3.11-slim
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8080:8080"
+    volumes:
+      - ./monitor:/app
+      - ./data:/data
+    working_dir: /app
+    command: python3 app.py
+    environment:
+      # Miner definitions — extend with MINER_2_*, MINER_3_* for additional miners
+      - MINER_1_NAME=${MINER_1_NAME:-NanoFury NF2}
+      - MINER_1_TYPE=${MINER_1_TYPE:-bfgminer}
+      - MINER_1_HOST=${MINER_1_HOST:-nanofury_lottery}
+      - MINER_1_PORT=${MINER_1_PORT:-4028}
+      # Legacy single-miner fallback (used if no MINER_N_* vars are set)
+      - BFGMINER_HOST=${BFGMINER_HOST:-nanofury_lottery}
+      - BFGMINER_PORT=${BFGMINER_PORT:-4028}
+      - BLOCK_REWARD_BTC=${BLOCK_REWARD_BTC:-3.125}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_TO=${SMTP_TO:-}
+      - SMTP_STARTTLS=${SMTP_STARTTLS:-true}
+      - MONITOR_URL=${MONITOR_URL:-http://localhost:8080}
+    depends_on:
+      - nanofury_lottery
